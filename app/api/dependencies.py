@@ -35,7 +35,7 @@ def _get_sunat_gateway() -> SunatSoapAdapter:
 
 @lru_cache(maxsize=1)
 def _get_ubl_builder() -> Ubl21Builder:
-    return Ubl21Builder(ruc_emisor=settings.sunat_ruc)
+    return Ubl21Builder()
 
 
 @lru_cache(maxsize=1)

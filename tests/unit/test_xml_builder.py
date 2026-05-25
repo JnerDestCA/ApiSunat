@@ -20,7 +20,7 @@ from app.infrastructure.xml.ubl21_builder import (
 
 @pytest.fixture
 def builder():
-    return Ubl21Builder(ruc_emisor="20123456786", razon_social="MI EMPRESA S.A.C.")
+    return Ubl21Builder(razon_social="MI EMPRESA S.A.C.")
 
 
 @pytest.fixture

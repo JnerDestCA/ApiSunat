@@ -14,8 +14,7 @@ NS_SAC = "urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateCompon
 
 
 class Ubl21Builder:
-    def __init__(self, ruc_emisor: str, razon_social: str = "MI EMPRESA S.A.C."):
-        self._ruc_emisor = ruc_emisor
+    def __init__(self, razon_social: str = "MI EMPRESA S.A.C."):
         self._razon_social = razon_social
 
     def _make_doc(self, tag: str, ns: str, text: str = None) -> etree.Element:
@@ -51,12 +50,12 @@ class Ubl21Builder:
 
         root.append(self._make_doc("DocumentCurrencyCode", NS_CBC, comprobante.moneda.value))
 
-    def _build_signature(self, root: etree.Element) -> None:
+    def _build_signature(self, root: etree.Element, comprobante: Comprobante) -> None:
         sig = etree.SubElement(root, self._make_q("Signature", NS_CAC))
         sig.append(self._make_doc("ID", NS_CBC, "IDSignSG"))
         signer = etree.SubElement(sig, self._make_q("SignatoryParty", NS_CAC))
         signer.append(
-            self._make_doc("ID", NS_CBC, self._ruc_emisor)
+            self._make_doc("ID", NS_CBC, str(comprobante.ruc_emisor))
         )
         signer_name = etree.SubElement(signer, self._make_q("PartyName", NS_CAC))
         signer_name.append(
@@ -82,7 +81,7 @@ class Ubl21Builder:
         )
         ext_content.append(self._make_doc("Signature", NS_DS, ""))
 
-    def _build_accounting_supplier(self, root: etree.Element) -> None:
+    def _build_accounting_supplier(self, root: etree.Element, comprobante: Comprobante) -> None:
         party = etree.SubElement(
             root, self._make_q("AccountingSupplierParty", NS_CAC)
         )
@@ -92,7 +91,7 @@ class Ubl21Builder:
         party_id = etree.SubElement(
             party_identification, self._make_q("PartyIdentification", NS_CAC)
         )
-        party_id.append(self._make_doc("ID", NS_CBC, self._ruc_emisor))
+        party_id.append(self._make_doc("ID", NS_CBC, str(comprobante.ruc_emisor)))
         party_id[0].set("schemeID", "6")
         party_name = etree.SubElement(
             party_identification, self._make_q("PartyName", NS_CAC)
@@ -247,8 +246,8 @@ class Ubl21Builder:
 
         self._build_UBLExtensions(root)
         self._build_header(root, comprobante)
-        self._build_signature(root)
-        self._build_accounting_supplier(root)
+        self._build_signature(root, comprobante)
+        self._build_accounting_supplier(root, comprobante)
 
         if comprobante.tipo_doc_cliente and comprobante.num_doc_cliente:
             customer = etree.SubElement(
@@ -322,8 +321,8 @@ class Ubl21Builder:
         root.append(self._make_doc("InvoiceTypeCode", NS_CBC, "01"))
         root.append(self._make_doc("DocumentCurrencyCode", NS_CBC, "PEN"))
 
-        self._build_signature(root)
-        self._build_accounting_supplier(root)
+        self._build_signature(root, comprobante)
+        self._build_accounting_supplier(root, comprobante)
 
         billing_ref = etree.SubElement(
             root, self._make_q("BillingReference", NS_CAC)
