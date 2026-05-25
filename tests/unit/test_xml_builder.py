@@ -67,15 +67,19 @@ class TestXmlBuilder:
         ext = root.find(f"{{{NS_EXT}}}UBLExtensions")
         assert ext is not None
 
-    def test_placeholder_firma_vacio(self, builder, boleta_ejemplo):
+    def test_ds_signature_template_full(self, builder, boleta_ejemplo):
         xml_str = builder.build_boleta(
             boleta_ejemplo, Decimal("2600.00"), Decimal("468.00"), Decimal("3068.00")
         )
         root = etree.fromstring(xml_str.encode("utf-8"))
-        ext_content = root.find(
-            f".//{{{NS_EXT}}}ExtensionContent"
-        )
-        assert ext_content is not None
+        signature = root.find(f".//{{{NS_DS}}}Signature")
+        assert signature is not None
+        assert signature.get("Id") == "IDSignSG"
+        assert signature.find(f"{{{NS_DS}}}SignedInfo") is not None
+        assert signature.find(f"{{{NS_DS}}}SignatureValue") is not None
+        assert signature.find(f".//{{{NS_DS}}}Reference") is not None
+        assert signature.find(f".//{{{NS_DS}}}DigestValue") is not None
+        assert signature.find(f".//{{{NS_DS}}}KeyInfo") is not None
 
     def test_calculo_igv_correcto(self, builder, boleta_ejemplo):
         items = boleta_ejemplo.items

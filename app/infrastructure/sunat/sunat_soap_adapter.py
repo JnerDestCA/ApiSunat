@@ -91,23 +91,49 @@ class SunatSoapAdapter(SunatGateway):
                 descripcion="Respuesta vacía de SUNAT",
                 cdr_bytes=None,
             )
+
+        # Si la respuesta es bytes directamente (CDR zip)
+        if isinstance(response, bytes):
+            return CdrResponse(
+                codigo_respuesta="0",
+                descripcion="Aceptado",
+                cdr_bytes=response,
+            )
+
         resp_dict = helpers.serialize_object(response, dict)
-        codigo = resp_dict.get("codigoRespuesta", "") or resp_dict.get(
-            "codigo", ""
+        print(f"SUNAT RESPONSE KEYS: {resp_dict.keys()}")
+        print(f"SUNAT RESPONSE: {resp_dict}")
+        
+        # La respuesta puede venir en diferentes formatos según el método
+        codigo = (
+            resp_dict.get("codigoRespuesta")
+            or resp_dict.get("codigo")
+            or "0"
         )
-        descripcion = resp_dict.get("descripcion", "")
-        cdr_b64 = resp_dict.get("archivo", "") or resp_dict.get("cdr", "")
-        observaciones = resp_dict.get("observaciones", None)
+        descripcion = resp_dict.get("descripcion") or resp_dict.get("faultstring") or ""
+        
+        # El CDR puede venir en diferentes campos
+        cdr_raw = (
+            resp_dict.get("archivo")
+            or resp_dict.get("cdr")
+            or resp_dict.get("content")
+            or None
+        )
 
         cdr_bytes = None
-        if cdr_b64:
-            try:
-                cdr_bytes = base64.b64decode(cdr_b64)
-            except Exception:
-                pass
+        if cdr_raw:
+            if isinstance(cdr_raw, bytes):
+                cdr_bytes = cdr_raw
+            else:
+                try:
+                    cdr_bytes = base64.b64decode(cdr_raw)
+                except Exception:
+                    pass
+
+        observaciones = resp_dict.get("observaciones")
 
         return CdrResponse(
-            codigo_respuesta=str(codigo) if codigo else "0",
+            codigo_respuesta=str(codigo),
             descripcion=str(descripcion),
             cdr_bytes=cdr_bytes,
             observaciones=str(observaciones) if observaciones else None,

@@ -11,6 +11,7 @@ NS_EXT = "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents
 NS_DS = "http://www.w3.org/2000/09/xmldsig#"
 NS_XSI = "http://www.w3.org/2001/XMLSchema-instance"
 NS_SAC = "urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1"
+NS_INVOICE = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
 
 
 class Ubl21Builder:
@@ -53,33 +54,18 @@ class Ubl21Builder:
     def _build_signature(self, root: etree.Element, comprobante: Comprobante) -> None:
         sig = etree.SubElement(root, self._make_q("Signature", NS_CAC))
         sig.append(self._make_doc("ID", NS_CBC, "IDSignSG"))
-        signer = etree.SubElement(sig, self._make_q("SignatoryParty", NS_CAC))
-        signer.append(
-            self._make_doc("ID", NS_CBC, str(comprobante.ruc_emisor))
-        )
-        signer_name = etree.SubElement(signer, self._make_q("PartyName", NS_CAC))
-        signer_name.append(
-            self._make_doc("Name", NS_CBC, self._razon_social)
-        )
-        digital_attachment = etree.SubElement(
-            sig, self._make_q("DigitalSignatureAttachment", NS_CAC)
-        )
-        ext_ref = etree.SubElement(
-            digital_attachment, self._make_q("ExternalReference", NS_CAC)
-        )
+
+        # SignatoryParty completamente vacío
+        etree.SubElement(sig, self._make_q("SignatoryParty", NS_CAC))
+
+        digital_attachment = etree.SubElement(sig, self._make_q("DigitalSignatureAttachment", NS_CAC))
+        ext_ref = etree.SubElement(digital_attachment, self._make_q("ExternalReference", NS_CAC))
         ext_ref.append(self._make_doc("URI", NS_CBC, "#IDSignSG"))
 
     def _build_UBLExtensions(self, root: etree.Element) -> None:
-        ext = etree.SubElement(
-            root, self._make_q("UBLExtensions", NS_EXT)
-        )
-        ubl_ext = etree.SubElement(
-            ext, self._make_q("UBLExtension", NS_EXT)
-        )
-        ext_content = etree.SubElement(
-            ubl_ext, self._make_q("ExtensionContent", NS_EXT)
-        )
-        ext_content.append(self._make_doc("Signature", NS_DS, ""))
+        ext = etree.SubElement(root, self._make_q("UBLExtensions", NS_EXT))
+        ubl_ext = etree.SubElement(ext, self._make_q("UBLExtension", NS_EXT))
+        etree.SubElement(ubl_ext, self._make_q("ExtensionContent", NS_EXT))
 
     def _build_accounting_supplier(self, root: etree.Element, comprobante: Comprobante) -> None:
         party = etree.SubElement(
@@ -143,13 +129,20 @@ class Ubl21Builder:
             tax_subtotal = etree.SubElement(
                 tax_total, self._make_q("TaxSubtotal", NS_CAC)
             )
-            tax_subtotal.append(
-                self._make_doc("TaxAmount", NS_CBC, str(item.igv))
-            )
-            tax_subtotal[-1].set("currencyID", comprobante.moneda.value)
+            taxable = self._make_doc("TaxableAmount", NS_CBC, str(item.subtotal))
+            taxable.set("currencyID", comprobante.moneda.value)
+            tax_subtotal.append(taxable)
+
+            tax_amount_sub = self._make_doc("TaxAmount", NS_CBC, str(item.igv))
+            tax_amount_sub.set("currencyID", comprobante.moneda.value)
+            tax_subtotal.append(tax_amount_sub)
+
             tax_category = etree.SubElement(
                 tax_subtotal, self._make_q("TaxCategory", NS_CAC)
             )
+            tax_category.append(self._make_doc("ID", NS_CBC, "S"))
+            tax_category.append(self._make_doc("Percent", NS_CBC, str(round(item.igv_porcentaje * 100, 2))))
+            tax_category.append(self._make_doc("TaxExemptionReasonCode", NS_CBC, "10"))
             tax_scheme = etree.SubElement(
                 tax_category, self._make_q("TaxScheme", NS_CAC)
             )
@@ -175,47 +168,48 @@ class Ubl21Builder:
     def _build_legal_monetary_total(
         self, root: etree.Element, comprobante: Comprobante, subtotal: Decimal, total: Decimal
     ) -> None:
-        legal = etree.SubElement(
-            root, self._make_q("LegalMonetaryTotal", NS_CAC)
-        )
-        legal.append(
-            self._make_doc("LineExtensionAmount", NS_CBC, str(subtotal))
-        )
-        legal[-1].set("currencyID", comprobante.moneda.value)
-        legal.append(
-            self._make_doc("TaxInclusiveAmount", NS_CBC, str(total))
-        )
-        legal[-1].set("currencyID", comprobante.moneda.value)
-        legal.append(
-            self._make_doc("PayableAmount", NS_CBC, str(total))
-        )
-        legal[-1].set("currencyID", comprobante.moneda.value)
+        legal = etree.SubElement(root, self._make_q("LegalMonetaryTotal", NS_CAC))
+
+        line_ext = self._make_doc("LineExtensionAmount", NS_CBC, str(subtotal))
+        line_ext.set("currencyID", comprobante.moneda.value)
+        legal.append(line_ext)
+
+        tax_inclusive = self._make_doc("TaxInclusiveAmount", NS_CBC, str(total))
+        tax_inclusive.set("currencyID", comprobante.moneda.value)
+        legal.append(tax_inclusive)
+
+        charge_total = self._make_doc("ChargeTotalAmount", NS_CBC, "0.00")
+        charge_total.set("currencyID", comprobante.moneda.value)
+        legal.append(charge_total)
+
+        payable = self._make_doc("PayableAmount", NS_CBC, str(total))
+        payable.set("currencyID", comprobante.moneda.value)
+        legal.append(payable)
 
     def _build_tax_total(
-        self, root: etree.Element, comprobante: Comprobante, igv: Decimal
+        self, root: etree.Element, comprobante: Comprobante, igv: Decimal, subtotal: Decimal
     ) -> None:
-        tax_total = etree.SubElement(
-            root, self._make_q("TaxTotal", NS_CAC)
-        )
-        tax_total.append(
-            self._make_doc("TaxAmount", NS_CBC, str(igv))
-        )
-        tax_total[-1].set("currencyID", comprobante.moneda.value)
-        tax_subtotal = etree.SubElement(
-            tax_total, self._make_q("TaxSubtotal", NS_CAC)
-        )
-        tax_subtotal.append(
-            self._make_doc("TaxAmount", NS_CBC, str(igv))
-        )
-        tax_subtotal[-1].set("currencyID", comprobante.moneda.value)
-        tax_category = etree.SubElement(
-            tax_subtotal, self._make_q("TaxCategory", NS_CAC)
-        )
+        tax_total = etree.SubElement(root, self._make_q("TaxTotal", NS_CAC))
+
+        tax_amount = self._make_doc("TaxAmount", NS_CBC, str(igv))
+        tax_amount.set("currencyID", comprobante.moneda.value)
+        tax_total.append(tax_amount)
+
+        tax_subtotal = etree.SubElement(tax_total, self._make_q("TaxSubtotal", NS_CAC))
+
+        # 👈 base imponible global
+        taxable = self._make_doc("TaxableAmount", NS_CBC, str(subtotal))
+        taxable.set("currencyID", comprobante.moneda.value)
+        tax_subtotal.append(taxable)
+
+        tax_amount_sub = self._make_doc("TaxAmount", NS_CBC, str(igv))
+        tax_amount_sub.set("currencyID", comprobante.moneda.value)
+        tax_subtotal.append(tax_amount_sub)
+
+        tax_category = etree.SubElement(tax_subtotal, self._make_q("TaxCategory", NS_CAC))
         tax_category.append(self._make_doc("ID", NS_CBC, "S"))
         tax_category.append(self._make_doc("Percent", NS_CBC, "18.00"))
-        tax_scheme = etree.SubElement(
-            tax_category, self._make_q("TaxScheme", NS_CAC)
-        )
+        tax_scheme = etree.SubElement(tax_category, self._make_q("TaxScheme", NS_CAC))
         tax_scheme.append(self._make_doc("ID", NS_CBC, "1000"))
         tax_scheme.append(self._make_doc("Name", NS_CBC, "IGV"))
         tax_scheme.append(self._make_doc("TaxTypeCode", NS_CBC, "VAT"))
@@ -228,7 +222,7 @@ class Ubl21Builder:
         total: Decimal,
     ) -> str:
         root = etree.Element(
-            self._make_q("Invoice", NS_DS),
+            f"{{{NS_INVOICE}}}Invoice",
             nsmap={
                 "cbc": NS_CBC,
                 "cac": NS_CAC,
@@ -238,7 +232,6 @@ class Ubl21Builder:
                 "sac": NS_SAC,
             },
         )
-        root.tag = self._make_q("Invoice", NS_CAC)
         root.set(f"{{{NS_XSI}}}schemaLocation", (
             "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2 "
             "http://www.cpe.sunat.gob.pe/sites/default/files/archivos/2.1/UBL-2.1.xsd"
@@ -272,7 +265,7 @@ class Ubl21Builder:
                     self._make_doc("RegistrationName", NS_CBC, comprobante.nombre_cliente)
                 )
 
-        self._build_tax_total(root, comprobante, igv)
+        self._build_tax_total(root, comprobante, igv, subtotal)
         self._build_legal_monetary_total(root, comprobante, subtotal, total)
         self._build_items(root, comprobante.items, comprobante)
 
