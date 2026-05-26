@@ -10,6 +10,14 @@ class Settings(BaseSettings):
     pfx_password: str = ""
     api_secret_key: str = ""
     database_url: str = "sqlite+aiosqlite:///./sunat.db"
+    SUNAT_RAZON_SOCIAL: str
+    SUNAT_UBIGEO: str
+    SUNAT_CODIGO_LOCAL: str
+    SUNAT_DIRECCION: str
+    SUNAT_DISTRITO: str
+    SUNAT_PROVINCIA: str
+    SUNAT_DEPARTAMENTO: str
+    SUNAT_PAIS: str
 
     @property
     def is_produccion(self) -> bool:

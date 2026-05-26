@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from lxml import etree
+from app.config import settings
 
 from app.domain.entities.comprobante import Comprobante, Item
 
@@ -15,8 +16,15 @@ NS_INVOICE = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
 
 
 class Ubl21Builder:
-    def __init__(self, razon_social: str = "MI EMPRESA S.A.C."):
-        self._razon_social = razon_social
+    def __init__(self):
+        self._razon_social   = settings.SUNAT_RAZON_SOCIAL
+        self._ubigeo         = settings.SUNAT_UBIGEO
+        self._codigo_local = settings.SUNAT_CODIGO_LOCAL
+        self._direccion      = settings.SUNAT_DIRECCION
+        self._distrito       = settings.SUNAT_DISTRITO
+        self._provincia      = settings.SUNAT_PROVINCIA
+        self._departamento   = settings.SUNAT_DEPARTAMENTO
+        self._pais           = settings.SUNAT_PAIS
 
     def _make_doc(self, tag: str, ns: str, text: str = None) -> etree.Element:
         el = etree.Element(f"{{{ns}}}{tag}")
@@ -27,29 +35,28 @@ class Ubl21Builder:
     def _make_q(self, tag: str, ns: str, text: str = "") -> str:
         return f"{{{ns}}}{tag}"
 
-    def _build_header(self, root: etree.Element, comprobante: Comprobante) -> None:
+    def _build_header(self, root: etree.Element, comprobante: Comprobante, es_factura: bool = False) -> None:
         root.append(self._make_doc("UBLVersionID", NS_CBC, "2.1"))
         root.append(self._make_doc("CustomizationID", NS_CBC, "2.0"))
-
-        root.append(
-            self._make_doc("ID", NS_CBC, str(comprobante.serie_correlativo))
-        )
-        root.append(
-            self._make_doc(
-                "IssueDate", NS_CBC, comprobante.fecha_emision.strftime("%Y-%m-%d")
-            )
-        )
-        root.append(
-            self._make_doc(
-                "IssueTime", NS_CBC, comprobante.fecha_emision.strftime("%H:%M:%S")
-            )
-        )
+        root.append(self._make_doc("ID", NS_CBC, str(comprobante.serie_correlativo)))
+        root.append(self._make_doc("IssueDate", NS_CBC, comprobante.fecha_emision.strftime("%Y-%m-%d")))
+        root.append(self._make_doc("IssueTime", NS_CBC, comprobante.fecha_emision.strftime("%H:%M:%S")))
 
         invoice_type = self._make_doc("InvoiceTypeCode", NS_CBC, comprobante.tipo.value)
-        invoice_type.set("listID", "0101")
+        if comprobante.tipo.value == "01":
+            invoice_type.set("listID", "0101")
+            invoice_type.set("listAgencyName", "PE:SUNAT")
+            invoice_type.set("listName", "Tipo de Documento")
+            invoice_type.set("listURI", "urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01")
+        else:
+            invoice_type.set("listID", "0101")
         root.append(invoice_type)
 
         root.append(self._make_doc("DocumentCurrencyCode", NS_CBC, comprobante.moneda.value))
+
+        # 👈 LineCountNumeric va aquí, al final del header
+        if es_factura:
+            root.append(self._make_doc("LineCountNumeric", NS_CBC, str(len(comprobante.items))))
 
     def _build_signature(self, root: etree.Element, comprobante: Comprobante) -> None:
         sig = etree.SubElement(root, self._make_q("Signature", NS_CAC))
@@ -67,28 +74,24 @@ class Ubl21Builder:
         ubl_ext = etree.SubElement(ext, self._make_q("UBLExtension", NS_EXT))
         etree.SubElement(ubl_ext, self._make_q("ExtensionContent", NS_EXT))
 
-    def _build_accounting_supplier(self, root: etree.Element, comprobante: Comprobante) -> None:
-        party = etree.SubElement(
-            root, self._make_q("AccountingSupplierParty", NS_CAC)
-        )
-        party_identification = etree.SubElement(
-            party, self._make_q("Party", NS_CAC)
-        )
-        party_id = etree.SubElement(
-            party_identification, self._make_q("PartyIdentification", NS_CAC)
-        )
-        party_id.append(self._make_doc("ID", NS_CBC, str(comprobante.ruc_emisor)))
-        party_id[0].set("schemeID", "6")
-        party_name = etree.SubElement(
-            party_identification, self._make_q("PartyName", NS_CAC)
-        )
+    def _build_accounting_supplier(self, root: etree.Element, comprobante: Comprobante, es_factura: bool = False) -> None:
+        supplier = etree.SubElement(root, self._make_q("AccountingSupplierParty", NS_CAC))
+        party = etree.SubElement(supplier, self._make_q("Party", NS_CAC))
+
+        party_id = etree.SubElement(party, self._make_q("PartyIdentification", NS_CAC))
+        id_el = self._make_doc("ID", NS_CBC, str(comprobante.ruc_emisor))
+        id_el.set("schemeID", "6")
+        party_id.append(id_el)
+
+        party_name = etree.SubElement(party, self._make_q("PartyName", NS_CAC))
         party_name.append(self._make_doc("Name", NS_CBC, self._razon_social))
-        party_legal = etree.SubElement(
-            party_identification, self._make_q("PartyLegalEntity", NS_CAC)
-        )
-        party_legal.append(
-            self._make_doc("RegistrationName", NS_CBC, self._razon_social)
-        )
+
+        party_legal = etree.SubElement(party, self._make_q("PartyLegalEntity", NS_CAC))
+        party_legal.append(self._make_doc("RegistrationName", NS_CBC, self._razon_social))
+
+        if es_factura:
+            reg_address = etree.SubElement(party_legal, self._make_q("RegistrationAddress", NS_CAC))
+            reg_address.append(self._make_doc("AddressTypeCode", NS_CBC, self._codigo_local))
 
     def _build_items(self, root: etree.Element, items: list, comprobante: Comprobante) -> None:
         for item in items:
@@ -111,8 +114,9 @@ class Ubl21Builder:
             alternative_condition = etree.SubElement(
                 pricing, self._make_q("AlternativeConditionPrice", NS_CAC)
             )
+            precio_con_igv = round(item.precio_unitario * (1 + item.igv_porcentaje), 2)
             alternative_condition.append(
-                self._make_doc("PriceAmount", NS_CBC, str(item.precio_unitario))
+                self._make_doc("PriceAmount", NS_CBC, str(precio_con_igv))
             )
             alternative_condition[-1].set("currencyID", comprobante.moneda.value)
             alternative_condition.append(
@@ -278,8 +282,38 @@ class Ubl21Builder:
         igv: Decimal,
         total: Decimal,
     ) -> str:
-        xml = self.build_boleta(comprobante, subtotal, igv, total)
-        return xml
+        root = etree.Element(
+            f"{{{NS_INVOICE}}}Invoice",
+            nsmap={
+                "cbc": NS_CBC, "cac": NS_CAC, "ext": NS_EXT,
+                "ds": NS_DS, "xsi": NS_XSI, "sac": NS_SAC,
+            },
+        )
+        root.set(f"{{{NS_XSI}}}schemaLocation", (
+            "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2 "
+            "http://www.cpe.sunat.gob.pe/sites/default/files/archivos/2.1/UBL-2.1.xsd"
+        ))
+
+        self._build_UBLExtensions(root)
+        self._build_header(root, comprobante, es_factura=True)
+        self._build_signature(root, comprobante)
+        self._build_accounting_supplier(root, comprobante, es_factura=True)
+
+        if comprobante.num_doc_cliente:
+            customer = etree.SubElement(root, self._make_q("AccountingCustomerParty", NS_CAC))
+            customer_party = etree.SubElement(customer, self._make_q("Party", NS_CAC))
+            customer_id = etree.SubElement(customer_party, self._make_q("PartyIdentification", NS_CAC))
+            id_el = self._make_doc("ID", NS_CBC, comprobante.num_doc_cliente)
+            id_el.set("schemeID", "6")  # RUC siempre en facturas
+            customer_id.append(id_el)
+            party_legal = etree.SubElement(customer_party, self._make_q("PartyLegalEntity", NS_CAC))
+            party_legal.append(self._make_doc("RegistrationName", NS_CBC, comprobante.nombre_cliente or ""))
+
+        self._build_tax_total(root, comprobante, igv, subtotal)
+        self._build_legal_monetary_total(root, comprobante, subtotal, total)
+        self._build_items(root, comprobante.items, comprobante)
+
+        return etree.tostring(root, xml_declaration=True, encoding="UTF-8").decode("utf-8")
 
     def build_anulacion(self, comprobante: Comprobante, motivo: str) -> str:
         root = etree.Element(
