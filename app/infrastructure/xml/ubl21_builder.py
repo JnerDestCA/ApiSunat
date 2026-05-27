@@ -18,6 +18,7 @@ NS_INVOICE = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
 class Ubl21Builder:
     def __init__(self):
         self._razon_social   = settings.SUNAT_RAZON_SOCIAL
+        self._tipo_operacion = settings.SUNAT_TIPO_OPERACION
         self._ubigeo         = settings.SUNAT_UBIGEO
         self._codigo_local = settings.SUNAT_CODIGO_LOCAL
         self._direccion      = settings.SUNAT_DIRECCION
@@ -53,10 +54,6 @@ class Ubl21Builder:
         root.append(invoice_type)
 
         root.append(self._make_doc("DocumentCurrencyCode", NS_CBC, comprobante.moneda.value))
-
-        # 👈 LineCountNumeric va aquí, al final del header
-        if es_factura:
-            root.append(self._make_doc("LineCountNumeric", NS_CBC, str(len(comprobante.items))))
 
     def _build_signature(self, root: etree.Element, comprobante: Comprobante) -> None:
         sig = etree.SubElement(root, self._make_q("Signature", NS_CAC))
@@ -308,6 +305,11 @@ class Ubl21Builder:
             customer_id.append(id_el)
             party_legal = etree.SubElement(customer_party, self._make_q("PartyLegalEntity", NS_CAC))
             party_legal.append(self._make_doc("RegistrationName", NS_CBC, comprobante.nombre_cliente or ""))
+
+        if True:  # es_factura siempre en build_factura
+            note = self._make_doc("Note", NS_CBC, self._tipo_operacion)
+            note.set("languageLocaleID", "2006")
+            root.append(note)
 
         self._build_tax_total(root, comprobante, igv, subtotal)
         self._build_legal_monetary_total(root, comprobante, subtotal, total)

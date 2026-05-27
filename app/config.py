@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     api_secret_key: str = ""
     database_url: str = "sqlite+aiosqlite:///./sunat.db"
     SUNAT_RAZON_SOCIAL: str
+    SUNAT_TIPO_OPERACION: str = "0101"
     SUNAT_UBIGEO: str
     SUNAT_CODIGO_LOCAL: str
     SUNAT_DIRECCION: str
