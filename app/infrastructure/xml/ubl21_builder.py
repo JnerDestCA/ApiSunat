@@ -53,7 +53,17 @@ class Ubl21Builder:
             invoice_type.set("listID", "0101")
         root.append(invoice_type)
 
+        if es_factura:
+            note = self._make_doc("Note", NS_CBC, self._tipo_operacion)
+            note.set("languageLocaleID", "2006")
+            root.append(note)
+
         root.append(self._make_doc("DocumentCurrencyCode", NS_CBC, comprobante.moneda.value))
+
+    def _build_payment_terms(self, root: etree.Element, forma_pago: str = "Contado") -> None:
+        payment_terms = etree.SubElement(root, self._make_q("PaymentTerms", NS_CAC))
+        payment_terms.append(self._make_doc("ID", NS_CBC, "FormaPago"))
+        payment_terms.append(self._make_doc("PaymentMeansID", NS_CBC, forma_pago))
 
     def _build_signature(self, root: etree.Element, comprobante: Comprobante) -> None:
         sig = etree.SubElement(root, self._make_q("Signature", NS_CAC))
@@ -306,11 +316,7 @@ class Ubl21Builder:
             party_legal = etree.SubElement(customer_party, self._make_q("PartyLegalEntity", NS_CAC))
             party_legal.append(self._make_doc("RegistrationName", NS_CBC, comprobante.nombre_cliente or ""))
 
-        if True:  # es_factura siempre en build_factura
-            note = self._make_doc("Note", NS_CBC, self._tipo_operacion)
-            note.set("languageLocaleID", "2006")
-            root.append(note)
-
+        self._build_payment_terms(root)
         self._build_tax_total(root, comprobante, igv, subtotal)
         self._build_legal_monetary_total(root, comprobante, subtotal, total)
         self._build_items(root, comprobante.items, comprobante)
