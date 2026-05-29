@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime,date
 from decimal import Decimal
 from lxml import etree
 from app.config import settings
@@ -13,7 +13,7 @@ NS_DS = "http://www.w3.org/2000/09/xmldsig#"
 NS_XSI = "http://www.w3.org/2001/XMLSchema-instance"
 NS_SAC = "urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1"
 NS_INVOICE = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
-
+NS_VOID = "urn:sunat:names:specification:ubl:peru:schema:xsd:VoidedDocuments-1"
 
 class Ubl21Builder:
     def __init__(self):
@@ -324,8 +324,9 @@ class Ubl21Builder:
         return etree.tostring(root, xml_declaration=True, encoding="UTF-8").decode("utf-8")
 
     def build_anulacion(self, comprobante: Comprobante, motivo: str) -> str:
+        hoy = date.today()
         root = etree.Element(
-            self._make_q("Invoice", NS_DS),
+            f"{{{NS_VOID}}}VoidedDocuments",
             nsmap={
                 "cbc": NS_CBC,
                 "cac": NS_CAC,
@@ -335,41 +336,26 @@ class Ubl21Builder:
                 "sac": NS_SAC,
             },
         )
-        root.tag = self._make_q("Invoice", NS_CAC)
+        root.set(f"{{{NS_XSI}}}schemaLocation", (
+            "urn:sunat:names:specification:ubl:peru:schema:xsd:VoidedDocuments-1 "
+            "http://www.cpe.sunat.gob.pe/sites/default/files/archivos/2.1/UBLPE-VoidedDocuments-1.0.xsd"
+        ))
 
         self._build_UBLExtensions(root)
-        root.append(self._make_doc("UBLVersionID", NS_CBC, "2.1"))
-        root.append(self._make_doc("CustomizationID", NS_CBC, "2.0"))
-        root.append(
-            self._make_doc("ID", NS_CBC, str(comprobante.serie_correlativo))
-        )
-        root.append(
-            self._make_doc(
-                "IssueDate", NS_CBC, datetime.now().strftime("%Y-%m-%d")
-            )
-        )
-        root.append(
-            self._make_doc(
-                "IssueTime", NS_CBC, datetime.now().strftime("%H:%M:%S")
-            )
-        )
-        root.append(self._make_doc("InvoiceTypeCode", NS_CBC, "01"))
-        root.append(self._make_doc("DocumentCurrencyCode", NS_CBC, "PEN"))
+        root.append(self._make_doc("UBLVersionID", NS_CBC, "2.0"))
+        root.append(self._make_doc("CustomizationID", NS_CBC, "1.0"))
+        root.append(self._make_doc("ID", NS_CBC, f"RA-{hoy.strftime('%Y%m%d')}-1"))
+        root.append(self._make_doc("ReferenceDate", NS_CBC, comprobante.fecha_emision.strftime("%Y-%m-%d")))
+        root.append(self._make_doc("IssueDate", NS_CBC, hoy.strftime("%Y-%m-%d")))
 
         self._build_signature(root, comprobante)
         self._build_accounting_supplier(root, comprobante)
 
-        billing_ref = etree.SubElement(
-            root, self._make_q("BillingReference", NS_CAC)
-        )
-        inv_doc_ref = etree.SubElement(
-            billing_ref, self._make_q("InvoiceDocumentReference", NS_CAC)
-        )
-        inv_doc_ref.append(
-            self._make_doc("ID", NS_CBC, str(comprobante.serie_correlativo))
-        )
-        inv_doc_ref.append(
-            self._make_doc("DocumentTypeCode", NS_CBC, "01")
-        )
+        void_line = etree.SubElement(root, self._make_q("VoidedDocumentsLine", NS_SAC))
+        void_line.append(self._make_doc("LineID", NS_CBC, "1"))
+        void_line.append(self._make_doc("DocumentTypeCode", NS_CBC, comprobante.tipo.value))
+        void_line.append(self._make_doc("DocumentSerialID", NS_CBC, comprobante.serie))
+        void_line.append(self._make_doc("DocumentNumberID", NS_CBC, str(comprobante.correlativo)))
+        void_line.append(self._make_doc("VoidReasonDescription", NS_CBC, motivo))
 
         return etree.tostring(root, xml_declaration=True, encoding="UTF-8").decode("utf-8")

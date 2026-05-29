@@ -9,7 +9,7 @@ from app.domain.ports.outbound.sunat_gateway import SunatGateway
 from app.domain.ports.outbound.xml_signer import XmlSigner
 from app.infrastructure.xml.ubl21_builder import Ubl21Builder
 from app.infrastructure.zip.zip_service import ZipService
-
+from datetime import date
 
 class AnularComprobanteUseCase(ComprobanteService):
     def __init__(
@@ -42,14 +42,15 @@ class AnularComprobanteUseCase(ComprobanteService):
             xml_sin_firmar, self._private_key, self._certificate
         )
 
+        # 👈 nombre correcto para comunicación de baja
         ruc = str(comprobante.ruc_emisor)
-        serie = comprobante.serie_correlativo.serie
-        corr = comprobante.serie_correlativo.correlativo
-        tipo = comprobante.tipo.value
-        filename = f"{ruc}-{tipo}-{serie}-{corr:08d}"
+        hoy = date.today().strftime("%Y%m%d")
+        filename = f"{ruc}-RA-{hoy}-1"
+
         zip_bytes, _ = self._zip_service.compress(xml_firmado, filename)
 
-        cdr = await self._sunat_gateway.send_bill(zip_bytes, f"{filename}.zip")
+        # 👈 send_summary no send_bill
+        cdr = await self._sunat_gateway.send_summary(zip_bytes, f"{filename}.zip")
 
         cdr_xml_b64 = None
         if cdr.cdr_bytes:

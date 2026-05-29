@@ -9,6 +9,7 @@ class CdrResponse:
     descripcion: str
     cdr_bytes: Optional[bytes] = None
     observaciones: Optional[str] = None
+    ticket: str | None = None
 
 
 class SunatGateway:
