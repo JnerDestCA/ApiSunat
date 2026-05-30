@@ -86,6 +86,7 @@ class Ubl21Builder:
 
         if es_baja:
             supplier.append(self._make_doc("CustomerAssignedAccountID", NS_CBC, str(comprobante.ruc_emisor)))
+            supplier.append(self._make_doc("AdditionalAccountID", NS_CBC, "6"))
 
         party = etree.SubElement(supplier, self._make_q("Party", NS_CAC))
 
