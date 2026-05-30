@@ -103,7 +103,17 @@ class SunatSoapAdapter(SunatGateway):
         resp_dict = helpers.serialize_object(response, dict)
         print(f"SUNAT RESPONSE KEYS: {resp_dict.keys()}")
         print(f"SUNAT RESPONSE: {resp_dict}")
-        
+
+        # send_summary devuelve ticket, no CDR inmediato
+        ticket = resp_dict.get("ticket") or None
+        if ticket:
+            return CdrResponse(
+                codigo_respuesta="PENDING",
+                descripcion="Comunicacion de baja enviada, esperando procesamiento",
+                cdr_bytes=None,
+                ticket=str(ticket),
+            )
+
         # La respuesta puede venir en diferentes formatos según el método
         codigo = (
             resp_dict.get("codigoRespuesta")

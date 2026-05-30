@@ -81,8 +81,12 @@ class Ubl21Builder:
         ubl_ext = etree.SubElement(ext, self._make_q("UBLExtension", NS_EXT))
         etree.SubElement(ubl_ext, self._make_q("ExtensionContent", NS_EXT))
 
-    def _build_accounting_supplier(self, root: etree.Element, comprobante: Comprobante, es_factura: bool = False) -> None:
+    def _build_accounting_supplier(self, root: etree.Element, comprobante: Comprobante, es_factura: bool = False, es_baja: bool = False) -> None:
         supplier = etree.SubElement(root, self._make_q("AccountingSupplierParty", NS_CAC))
+
+        if es_baja:
+            supplier.append(self._make_doc("CustomerAssignedAccountID", NS_CBC, str(comprobante.ruc_emisor)))
+
         party = etree.SubElement(supplier, self._make_q("Party", NS_CAC))
 
         party_id = etree.SubElement(party, self._make_q("PartyIdentification", NS_CAC))
@@ -349,13 +353,13 @@ class Ubl21Builder:
         root.append(self._make_doc("IssueDate", NS_CBC, hoy.strftime("%Y-%m-%d")))
 
         self._build_signature(root, comprobante)
-        self._build_accounting_supplier(root, comprobante)
+        self._build_accounting_supplier(root, comprobante, es_baja=True)
 
         void_line = etree.SubElement(root, self._make_q("VoidedDocumentsLine", NS_SAC))
         void_line.append(self._make_doc("LineID", NS_CBC, "1"))
         void_line.append(self._make_doc("DocumentTypeCode", NS_CBC, comprobante.tipo.value))
-        void_line.append(self._make_doc("DocumentSerialID", NS_CBC, comprobante.serie))
-        void_line.append(self._make_doc("DocumentNumberID", NS_CBC, str(comprobante.correlativo)))
-        void_line.append(self._make_doc("VoidReasonDescription", NS_CBC, motivo))
+        void_line.append(self._make_doc("DocumentSerialID", NS_SAC, comprobante.serie_correlativo.serie))
+        void_line.append(self._make_doc("DocumentNumberID", NS_SAC, str(comprobante.serie_correlativo.correlativo)))
+        void_line.append(self._make_doc("VoidReasonDescription", NS_SAC, motivo))
 
         return etree.tostring(root, xml_declaration=True, encoding="UTF-8").decode("utf-8")

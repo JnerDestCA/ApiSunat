@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import hashlib
 import base64
 
@@ -51,6 +52,16 @@ class AnularComprobanteUseCase(ComprobanteService):
 
         # 👈 send_summary no send_bill
         cdr = await self._sunat_gateway.send_summary(zip_bytes, f"{filename}.zip")
+
+        # 👈 polling del ticket si send_summary devolvió uno
+        if cdr.ticket:
+            await asyncio.sleep(5)
+            cdr = await self._sunat_gateway.get_status(cdr.ticket)
+            intentos = 0
+            while cdr.codigo_respuesta == "PENDING" and intentos < 3:
+                await asyncio.sleep(5)
+                cdr = await self._sunat_gateway.get_status(cdr.ticket)
+                intentos += 1
 
         cdr_xml_b64 = None
         if cdr.cdr_bytes:
